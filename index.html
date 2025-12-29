@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram 账号批量检测工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* 状态小圆点动画 */
+        .ping-dot {
+            position: relative;
+            display: inline-flex;
+        }
+        .ping-dot span {
+            position: absolute;
+            display: inline-flex;
+            height: 100%;
+            width: 100%;
+            border-radius: 50%;
+            opacity: 0.75;
+            animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        @keyframes ping {
+            75%, 100% { transform: scale(2); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 min-h-screen font-sans selection:bg-blue-500 selection:text-white pb-20">
+
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        
+        <!-- 头部 -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                    <i class="fa-brands fa-telegram text-2xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-white">TG 批量检测工具</h1>
+                    <p class="text-xs text-slate-400">基于 Workers API 检测 · 纯净直连版</p>
+                </div>
+            </div>
+            
+            <!-- 统计卡片 -->
+            <div class="flex gap-4 text-sm">
+                <div class="bg-slate-800 rounded-lg px-4 py-2 border border-slate-700">
+                    <span class="text-slate-400">总数</span>
+                    <span id="statTotal" class="ml-2 font-bold text-white">0</span>
+                </div>
+                <div class="bg-slate-800 rounded-lg px-4 py-2 border border-green-900/50">
+                    <span class="text-green-400">正常</span>
+                    <span id="statActive" class="ml-2 font-bold text-green-400">0</span>
+                </div>
+                <div class="bg-slate-800 rounded-lg px-4 py-2 border border-red-900/50">
+                    <span class="text-red-400">异常</span>
+                    <span id="statBanned" class="ml-2 font-bold text-red-400">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 添加区域 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- 批量添加框 -->
+            <div class="md:col-span-2 glass-panel rounded-xl p-5 shadow-xl">
+                <h3 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-user-plus text-blue-400"></i> 添加账号 (一行一个)
+                </h3>
+                <textarea id="bulkInput" rows="3" 
+                    class="w-full bg-slate-800/50 border border-slate-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3 transition placeholder-slate-500 font-mono" 
+                    placeholder="@username1&#10;https://t.me/username2&#10;username3"></textarea>
+                <div class="mt-3 flex justify-end gap-3">
+                    <button onclick="clearInput()" class="text-slate-400 hover:text-white text-xs px-3 py-2">清空输入框</button>
+                    <button onclick="addUsers()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-lg shadow-blue-600/20 flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> 添加到列表
+                    </button>
+                </div>
+            </div>
+
+            <!-- 控制面板 -->
+            <div class="glass-panel rounded-xl p-5 shadow-xl flex flex-col justify-between">
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-300 mb-3">批量操作</h3>
+                    <p class="text-xs text-slate-500 mb-4">建议每次检测不超过 50 个以避免网络拥堵。</p>
+                </div>
+                <div class="space-y-3">
+                    <button id="btnStartBatch" onclick="startBatchCheck()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-lg text-sm font-bold transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-play"></i> 一键批量检测
+                    </button>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="exportCSV()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg text-xs font-medium transition">
+                            <i class="fa-solid fa-file-csv mr-1"></i> 导出结果
+                        </button>
+                        <button onclick="clearTable()" class="bg-red-900/30 hover:bg-red-900/50 text-red-300 border border-red-900/50 px-3 py-2 rounded-lg text-xs font-medium transition">
+                            <i class="fa-solid fa-trash mr-1"></i> 清空列表
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 进度条 -->
+        <div id="progressContainer" class="hidden mb-6 bg-slate-800 rounded-full h-2.5 overflow-hidden">
+            <div id="progressBar" class="bg-blue-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+
+        <!-- 表格区域 -->
+        <div class="glass-panel rounded-xl overflow-hidden shadow-2xl min-h-[400px] flex flex-col">
+            <div class="overflow-x-auto flex-grow">
+                <table class="w-full text-sm text-left text-slate-300">
+                    <thead class="text-xs text-slate-400 uppercase bg-slate-800/80 sticky top-0 z-10 backdrop-blur-md">
+                        <tr>
+                            <th scope="col" class="px-6 py-4 w-12 text-center">#</th>
+                            <th scope="col" class="px-6 py-4">用户名</th>
+                            <th scope="col" class="px-6 py-4">状态</th>
+                            <th scope="col" class="px-6 py-4">备注信息</th>
+                            <th scope="col" class="px-6 py-4 text-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTableBody">
+                        <!-- 数据行将插入这里 -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 空状态提示 -->
+            <div id="emptyState" class="flex flex-col items-center justify-center py-16 text-slate-500 hidden">
+                <i class="fa-solid fa-clipboard-list text-4xl mb-4 opacity-50"></i>
+                <p>列表为空，请在上方添加账号</p>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- 提示框 -->
+    <div id="toast" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 translate-y-20 opacity-0 transition-all duration-300 z-50 bg-slate-800 border border-slate-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3">
+        <i id="toastIcon" class="fa-solid fa-circle-info text-blue-500"></i>
+        <span id="toastMsg" class="font-medium text-sm">通知</span>
+    </div>
+
+    <script>
+        // --- 数据模型 ---
+        let users = [];
+        let isProcessing = false;
+        let shouldStop = false;
+
+        // --- 初始化 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            renderTable();
+            updateStats();
+        });
+
+        // --- 核心功能：添加用户 ---
+        function addUsers() {
+            const input = document.getElementById('bulkInput');
+            const rawText = input.value;
+            if (!rawText.trim()) {
+                showToast('请输入用户名', 'error');
+                return;
+            }
+
+            const lines = rawText.split(/[\n, ]+/); // 支持换行、逗号或空格分隔
+            let addedCount = 0;
+
+            lines.forEach(line => {
+                // 清洗用户名: 去掉 @, 去掉 https://t.me/, 去掉空白
+                const cleanName = line.replace(/https?:\/\/t\.me\//g, '').replace(/@/g, '').replace(/\//g, '').trim();
+                
+                if (cleanName && !users.some(u => u.username.toLowerCase() === cleanName.toLowerCase())) {
+                    users.push({
+                        username: cleanName,
+                        status: 'pending', // pending, active, banned, error
+                        msg: '等待检测',
+                        lastCheck: null
+                    });
+                    addedCount++;
+                }
+            });
+
+            input.value = '';
+            saveData();
+            renderTable();
+            updateStats();
+            showToast(`成功添加 ${addedCount} 个账号`);
+        }
+
+        // --- 核心功能：批量检测 ---
+        async function startBatchCheck() {
+            if (isProcessing) {
+                // 如果正在运行，则变成停止按钮的功能
+                return;
+            }
+
+            // 找出所有非 Active 的账号重新检测 (或者全部重新检测)
+            const targets = users; 
+
+            if (targets.length === 0) {
+                showToast('列表中没有账号', 'error');
+                return;
+            }
+
+            isProcessing = true;
+            shouldStop = false;
+            updateUiState('processing');
+
+            let processed = 0;
+            const total = targets.length;
+
+            // 串行检测
+            for (let i = 0; i < total; i++) {
+                if (shouldStop) break;
+
+                const user = targets[i];
+                
+                // UI 更新为正在检测
+                updateRowStatus(i, 'checking');
+                updateProgress(processed, total);
+
+                // 执行检测
+                await checkSingleUser(user);
+                
+                // 保存并更新单行 UI
+                saveData();
+                renderTable(); 
+                updateStats();
+
+                processed++;
+                
+                // 延迟 500ms 防止请求过快
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            isProcessing = false;
+            updateUiState('idle');
+            updateProgress(100, 100);
+            setTimeout(() => { document.getElementById('progressContainer').classList.add('hidden') }, 2000);
+            showToast('批量检测完成');
+        }
+
+        // --- 单个检测逻辑 ---
+        async function checkSingleUser(userObj) {
+            const apiUrl = `https://tgchk.pages.dev/api/check?u=${encodeURIComponent(userObj.username)}`;
+
+            try {
+                // 直接请求
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
+                const response = await fetch(apiUrl, { 
+                    signal: controller.signal,
+                    method: 'GET',
+                    mode: 'cors', // 明确指定 CORS 模式
+                    credentials: 'omit', // 不发送 Cookie，减少 CORS 问题
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    // HTTP 错误（如 404, 500 等）
+                    userObj.status = 'error';
+                    userObj.msg = `HTTP ${response.status}`;
+                    return; 
+                }
+
+                const data = await response.json();
+                
+                // 预期格式: {"username":"...","exists":true/false}
+                if (data && typeof data.exists !== 'undefined') {
+                    if (data.exists === true) {
+                        userObj.status = 'active';
+                        userObj.msg = '正常';
+                    } else {
+                        userObj.status = 'banned';
+                        userObj.msg = '异常/不存在';
+                    }
+                } else {
+                    userObj.status = 'error';
+                    userObj.msg = 'API 格式错误';
+                }
+                
+            } catch (err) {
+                // 已移除 console.error(err) 以消除控制台红字报错
+                
+                if (err.name === 'AbortError') {
+                    userObj.status = 'error';
+                    userObj.msg = '检测超时';
+                } else {
+                    userObj.status = 'error';
+                    // 不再显示 CORS 错误，统一显示请求失败
+                    userObj.msg = '请求失败'; 
+                }
+            }
+            
+            userObj.lastCheck = new Date().toLocaleString('zh-CN');
+        }
+
+        // --- UI 渲染 ---
+        function renderTable() {
+            const tbody = document.getElementById('userTableBody');
+            const emptyState = document.getElementById('emptyState');
+            
+            tbody.innerHTML = '';
+
+            if (users.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            users.forEach((user, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'bg-slate-800/50 border-b border-slate-700 hover:bg-slate-700/50 transition-colors group';
+                
+                // 状态样式
+                let badge = '';
+                if (user.status === 'active') {
+                    badge = `<span class="bg-green-900/40 text-green-400 border border-green-800 text-xs px-2.5 py-0.5 rounded-full inline-flex items-center gap-1"><i class="fa-solid fa-check"></i> 正常</span>`;
+                } else if (user.status === 'banned') {
+                    badge = `<span class="bg-red-900/40 text-red-400 border border-red-800 text-xs px-2.5 py-0.5 rounded-full inline-flex items-center gap-1"><i class="fa-solid fa-xmark"></i> 异常</span>`;
+                } else if (user.status === 'checking') {
+                    badge = `<span class="bg-blue-900/40 text-blue-400 border border-blue-800 text-xs px-2.5 py-0.5 rounded-full inline-flex items-center gap-1"><i class="fa-solid fa-circle-notch fa-spin"></i> 检测中</span>`;
+                } else if (user.status === 'error') {
+                    badge = `<span class="bg-yellow-900/40 text-yellow-400 border border-yellow-800 text-xs px-2.5 py-0.5 rounded-full inline-flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation"></i> ${user.msg}</span>`;
+                } else {
+                    badge = `<span class="bg-slate-700 text-slate-400 text-xs px-2.5 py-0.5 rounded-full">待检测</span>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 text-center text-slate-500 text-xs font-mono">${index + 1}</td>
+                    <td class="px-6 py-4 font-medium text-white flex items-center gap-2">
+                        <a href="https://t.me/${user.username}" target="_blank" class="hover:text-blue-400 transition underline decoration-dotted">@${user.username}</a>
+                    </td>
+                    <td class="px-6 py-4">${badge}</td>
+                    <td class="px-6 py-4 text-xs text-slate-400">${user.msg}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="removeUser(${index})" class="text-slate-500 hover:text-red-400 transition p-1" title="删除">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateUiState(state) {
+            const btn = document.getElementById('btnStartBatch');
+            const progressContainer = document.getElementById('progressContainer');
+            
+            if (state === 'processing') {
+                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> 检测中...';
+                btn.classList.add('opacity-75', 'cursor-not-allowed');
+                progressContainer.classList.remove('hidden');
+            } else {
+                btn.innerHTML = '<i class="fa-solid fa-play"></i> 一键批量检测';
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+            }
+        }
+
+        function updateProgress(current, total) {
+            const bar = document.getElementById('progressBar');
+            const percent = total === 0 ? 0 : (current / total) * 100;
+            bar.style.width = `${percent}%`;
+        }
+
+        function updateStats() {
+            document.getElementById('statTotal').innerText = users.length;
+            document.getElementById('statActive').innerText = users.filter(u => u.status === 'active').length;
+            document.getElementById('statBanned').innerText = users.filter(u => u.status === 'banned').length;
+        }
+
+        // --- 数据操作 ---
+        function removeUser(index) {
+            if (isProcessing) return; // 防止运行时删除导致索引错乱
+            users.splice(index, 1);
+            saveData();
+            renderTable();
+            updateStats();
+        }
+
+        function clearTable() {
+            if (isProcessing) return;
+            if (confirm('确定要清空列表吗？')) {
+                users = [];
+                saveData();
+                renderTable();
+                updateStats();
+                showToast('列表已清空');
+            }
+        }
+
+        function clearInput() {
+            document.getElementById('bulkInput').value = '';
+        }
+
+        // --- 持久化 (LocalStorage 代替 Cookie 以支持更大数据量) ---
+        function saveData() {
+            try {
+                localStorage.setItem('tg_checker_data_v2', JSON.stringify(users));
+            } catch (e) {
+                console.error('Storage full', e);
+                showToast('本地存储已满，无法保存更多数据', 'error');
+            }
+        }
+
+        function loadData() {
+            try {
+                const data = localStorage.getItem('tg_checker_data_v2');
+                if (data) {
+                    users = JSON.parse(data);
+                }
+            } catch (e) {
+                console.error('Load error', e);
+            }
+        }
+
+        // --- 导出 CSV ---
+        function exportCSV() {
+            if (users.length === 0) {
+                showToast('没有数据可导出', 'error');
+                return;
+            }
+            
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // BOM for Excel
+            csvContent += "Username,Status,Message,Last Check Time\n";
+            
+            users.forEach(u => {
+                const row = `${u.username},${u.status},${u.msg},${u.lastCheck || ''}`;
+                csvContent += row + "\r\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "tg_check_result.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- 辅助功能 ---
+        function updateRowStatus(index, status) {
+            // 这个函数仅用于视觉上的快速反馈，实际渲染由 renderTable 完成
+            // 若数据量大，直接操作 DOM 比重绘整个 Table 更高效，但这里保持简单
+            // users[index].status = status; // 已经在 checkBatch 中设置
+        }
+
+        let toastTimer;
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toastIcon');
+            const text = document.getElementById('toastMsg');
+            
+            text.innerText = msg;
+            if (type === 'error') {
+                icon.className = 'fa-solid fa-circle-xmark text-red-500';
+            } else {
+                icon.className = 'fa-solid fa-circle-check text-green-500';
+            }
+            
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+    </script>
+</body>
+</html>
